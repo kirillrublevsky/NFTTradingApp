@@ -1,0 +1,169 @@
+<!doctype html>
+<html>
+<head>
+    <title>Add your response</title>
+    <script>
+        let password;
+        let sets;
+
+        window.onload = function () {
+            for (const cookie of document.cookie.split(';')) {
+                if (cookie.trim().startsWith('password')) {
+                    password = cookie.split('=')[1];
+                    document.getElementById("security").innerHTML = "";
+                    document.getElementById("content").style.display = "block";
+                    populate();
+                }
+            }
+        };
+
+        function populate() {
+            const req = new XMLHttpRequest();
+            req.responseType = 'json';
+            req.open('GET', "/offer/data?password=" + password, true);
+            req.onload = function () {
+                document.getElementById("time").innerHTML = req.response.time;
+                const dataSets = document.getElementById("data-sets");
+                const tx = document.getElementById("tx");
+
+                sets = req.response.sets;
+
+                req.response.arr.forEach(e => {
+                    dataSets.innerHTML += ('<div><p>Data set name: ' + e.name + '; bid range: ' + e.range +
+                        '; step: ' + e.step + '; assets count: ' + e.count + '; duration: ' + e.duration + 'h' +
+                        '   <button id="' + e.name + '" onClick="remove(this.id)">Remove</button>    ' +
+                        '<button id="download-' + e.name + '" onClick="download(this.id)">Download</button>' +
+                        '</p></div>');
+                });
+                req.response.tx.forEach(e => {
+                    tx.innerHTML += ('<p>' + e + '</p>');
+                });
+
+                if (req.response.key) {
+                    document.getElementById("flush").style.display = "block";
+                } else {
+                    document.getElementById("private").style.display = "block";
+                }
+
+                const elements = document.getElementsByClassName('password_input');
+                [].forEach.call(elements, e => e.value = password);
+            };
+            req.send(null);
+        }
+
+        function download(id) {
+            const name = id.substring(9);
+            const element = document.createElement('a');
+
+            const set = {};
+            set[name] = sets[name];
+            const json = {set: set};
+
+            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(JSON.stringify(json)));
+            element.setAttribute('download', name);
+            element.style.display = 'none';
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+        }
+
+        function remove(id) {
+            const req = new XMLHttpRequest();
+            req.open('POST', "/offer/remove", true);
+            req.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+            req.onload = function () {
+                location.reload();
+            };
+            req.send('id=' + encodeURIComponent(id) + '&password=' + password);
+        }
+
+        function check() {
+            password = document.getElementById('password').value;
+            document.cookie = ('password=' + password);
+            const req = new XMLHttpRequest();
+            req.open('POST', "/offer/check", true);
+            req.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+            req.onload = function () {
+                if (JSON.parse(req.response) === 'ok') {
+                    document.getElementById("security").innerHTML = "";
+                    document.getElementById("content").style.display = "block";
+                    populate();
+                } else {
+                    alert("Wrong password");
+                }
+            };
+            req.send('password=' + password);
+        }
+    </script>
+</head>
+<body>
+<div id="security">
+    <label for="password">Enter your password:</label><br>
+    <input id="password" name="password" type="text" size="40"><br><br>
+    <button type="submit" onclick="check()">Submit</button>
+</div>
+<table id="content" style="width: 100%; display: none">
+    <tr>
+        <td style="width: 50%">
+            <form action="/offer/restart" method="post">
+                <p style="display: inline; "><b>Server started at: <span id="time"></span></b></p>
+                <button type="submit">Restart</button>
+                <input class="password_input" name="password" type="text" size="35" style="display: none">
+            </form>
+            <br>
+
+            <form action="/offer/add" method="post">
+                <label for="name">Data set name:</label><br>
+                <input id="name" name="name" type="text" size="40"><br><br>
+
+                <label for="list">Data sets:</label>
+                <input id="list" name="list" type="text" size="30">
+                <label for="all">all</label>
+                <input id="all" name="all" type="checkbox"><br><br>
+
+                <label for="duration">Duration in hours:</label><br>
+                <input id="duration" name="duration" type="text" size="40"><br><br>
+
+                <label for="from">Range from:</label>
+                <input id="from" name="from" type="text" size="10">
+                <label for="to">to:</label>
+                <input id="to" name="to" type="text" size="10"><br><br>
+                <label for="step">Step:</label>
+                <input id="step" name="step" type="text" size="35"><br><br>
+
+                <label for="data">Add data:</label><br>
+                <textarea rows="5" cols="45" id="data" name="data"></textarea><br><br>
+
+                <input class="password_input" name="password" type="text" size="35" style="display: none">
+
+                <button type="reset">Reset</button>
+                <button type="submit">Add</button>
+            </form>
+            <h1>Data sets:</h1>
+            <div id="data-sets"></div>
+        </td>
+        <td style="vertical-align: top; width: 50%">
+            <br>
+            <div id="flush" style="display: none">
+                <form action="/offer/flush" method="post">
+                    <label style="color: red">Remove private key:</label>
+                    <input class="password_input" name="password" type="text" size="35" style="display: none">
+                    <button type="submit">Remove</button>
+                </form>
+            </div>
+            <div id="private" style="display: none">
+                <form action="/offer/key" method="post">
+                    <label for="key" style="color: red">Enter private key:</label><br>
+                    <input id="key" name="key" type="text" size="40">
+                    <input class="password_input" name="password" type="text" size="35" style="display: none">
+                    <button type="submit">Set private key</button>
+                </form>
+            </div>
+            <div><p><b>Latest transactions:</b></p></div>
+            <br>
+            <div id="tx" style="height: 300px; overflow: auto"></div>
+        </td>
+    </tr>
+</table>
+</body>
+</html>
